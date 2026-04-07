@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+firebase-admin
+yt-dlp
+faster-whisper
+ollama
+python-dotenv
+pydantic
+python-multipart
+google-generativeai
