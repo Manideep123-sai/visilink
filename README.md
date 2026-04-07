@@ -1,55 +1,57 @@
-# Visilink: Advanced YouTube & Video AI Analyzer 🎥🧠
+# Visilink: Advanced YouTube & Video AI Analyzer
 
 Visilink is a powerful full-stack application designed to extract, analyze, and summarize video content using state-of-the-art AI models. It goes beyond simple transcription by identifying visual elements in a video (graphs, charts, diagrams) and incorporating them into structured summaries and interactive Q&A.
 
 ---
 
-## ✨ Features
+## Features
 
 - **Dual Source Support**: Analyze YouTube URLs directly or upload local video files.
 - **Multimodal AI Analysis**:
-  - **Transcription**: High-precision local transcription using `faster-whisper`.
+  - **Transcription**: High-precision local transcription using faster-whisper.
   - **Visual Recognition**: Automatically detects visual triggers (charts, board writing, etc.) and extracts relevant frames.
-  - **Frame Analysis**: Uses Gemini (cloud) or Moondream (local) to "see" and explain visual data.
-- **Advanced Summaries**: Generates structured Markdown summaries with **Comparison Tables** for visual content.
-- **Interactive Q&A**: Ask follow-up questions about the video’s spoken and visual content.
+  - **Frame Analysis**: Uses Gemini (cloud) or Moondream (local) to identify and explain visual data.
+  - **Text Generation**: Uses Gemini (cloud) or Qwen 2.5 (local) for summarization and answering questions.
+- **Advanced Summaries**: Generates structured Markdown summaries with Comparison Tables for visual content.
+- **Interactive Q&A**: Ask follow-up questions about the video's spoken and visual content.
 - **History Management**: Track and manage your past analyses in a beautiful, glassmorphic UI.
-- **AI Engine Toggle**: Switch between **Cloud (Gemini)** for speed/scale or **Local (Ollama/Whisper)** for privacy/cost.
+- **AI Engine Toggle**: Switch between Cloud (Gemini) for speed/scale or Local (Ollama/Whisper) for privacy/cost.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Backend
 - **Framework**: FastAPI (Python)
 - **Database**: Local MySQL (Relational storage)
-- **Transcription**: `faster-whisper`
-- **Visual AI**: `google-generativeai` (Gemini) or `ollama` (Moondream)
-- **Video Processing**: `yt-dlp` and `ffmpeg`
+- **Transcription**: faster-whisper (Base model)
+- **Local AI Models**: qwen2.5:3b (Text) and moondream (Vision) via Ollama
+- **Cloud AI**: Google Gemini 2.5 Flash
+- **Video Processing**: yt-dlp and ffmpeg
 
 ### Frontend
 - **Framework**: React 19 (Vite)
 - **Styling**: Vanilla CSS (Custom Glassmorphic Design)
 - **Icons**: Lucide React
-- **Markdown**: `react-markdown` with GFM support
+- **Markdown**: react-markdown with GFM support
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 - Python 3.9+ and Node.js 18+
-- **FFmpeg** (Ensure it is in your system PATH)
-- **MySQL** (Running locally on port 3306)
-- **Ollama** (Optional, for local AI functionality)
+- FFmpeg (Ensure it is in your system PATH)
+- MySQL (Running locally on port 3306)
+- Ollama (Required for local AI mode, with qwen2.5:3b and moondream models)
 
 ### 2. Backend Setup
-1. Navigate to `backend/`.
+1. Navigate to backend/.
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. Configure your `.env` file (see `.env.example`).
+3. Configure your .env file (see .env.example).
 4. Initialize the database:
    ```bash
    python create_db.py
@@ -60,7 +62,7 @@ Visilink is a powerful full-stack application designed to extract, analyze, and 
    ```
 
 ### 3. Frontend Setup
-1. Navigate to `frontend/`.
+1. Navigate to frontend/.
 2. Install dependencies:
    ```bash
    npm install
@@ -72,11 +74,11 @@ Visilink is a powerful full-stack application designed to extract, analyze, and 
 
 ---
 
-## 📦 Deployment Note
+## Deployment Note
 This application is currently optimized for local execution with a local MySQL instance. To deploy to production, ensure your environment variables and database connection strings are updated accordingly.
 
 ---
 
-## 🤝 Acknowledgments
+## Acknowledgments
 - Inspired by the need for better educational video summaries.
-- Powered by Google Gemini, OpenAI Whisper, and the Ollama community.
+- Powered by Google Gemini, OpenAI Whisper, and the Ollama community (Qwen & Moondream).
