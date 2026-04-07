@@ -12,6 +12,7 @@ from faster_whisper import WhisperModel
 import ollama
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
+import re
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -290,26 +291,27 @@ def summarize_text_gemini(transcript_json: str, visual_analyses: dict[float, str
     Summarizes the transcript using Gemini, weaving in visual context.
     """
     visual_context = ""
-    visual_format_section = ""
     if visual_analyses:
         visual_context = "\nVisual Content Identified in the Video (from analyzing actual video frames):\n"
         for t, analysis in visual_analyses.items():
-            visual_context += f"- At {t} seconds: {analysis}\n"
-        visual_format_section = "\n    VISUAL CONTENT\n    Describe what was shown in the graphs, charts, diagrams, or images. Include specific numbers, labels, and data points visible in the visuals.\n"
+            # Convert float seconds to MM:SS
+            m, s = divmod(int(t), 60)
+            visual_context += f"- At {m:02d}:{s:02d}: {analysis}\n"
 
     prompt = f"""
     You are an expert assistant. Please summarize the following video content.
     Generate the summary using standard Markdown. Use bolding, bullet points, and headers for clarity.
     
-    CRITICAL: The "Visual Content" data below was extracted by analyzing actual frames/screenshots from the video.
-    This data contains information about graphs, charts, numbers, and visuals that the speaker shows on screen.
+    CRITICAL CONSTRAINTS:
+    - Do NOT output reasoning, thinking process, confidence scores, or internal model notes.
+    - Output ONLY the formatted summary.
+    - Use MM:SS format for all timestamps (e.g., 02:45 instead of 165.0 seconds).
+    - If the video contains statistics, data tables, or comparisons, use a Markdown table.
     
-    You MUST include this visual data in your summary. 
-    For the VISUAL CONTENT section, format it as a Markdown table with columns for 'Timestamp', 'Visual Element', and 'Analysis/Description'.
-    Include specific numbers, data points, and labels from charts and graphs where possible.
-    Do NOT ignore the visual content. It is just as important as the spoken transcript.
+    The "Visual Content" section below was extracted by analyzing actual frames from the video.
+    You MUST include this in your summary, formatted as a Markdown table with columns: [Timestamp, Visual Element, Analysis/Description].
     
-    Structure the summary as follows:
+    Structure:
     # [VIDEO TITLE]
     
     ## OVERVIEW
@@ -322,13 +324,13 @@ def summarize_text_gemini(transcript_json: str, visual_analyses: dict[float, str
     ## VISUAL CONTENT (TABLE)
     | Timestamp | Visual Element | Analysis/Description |
     |-----------|---------------|-----------------------|
-    | [Time]    | [Element]     | [Detail]              |
+    | [MM:SS]   | [Element]     | [Detail]              |
     
     ## IMPORTANT POINTS
     - [Point 1]
     - [Point 2]
     
-    Transcript (JSON):
+    Transcript:
     {transcript_json}
     {visual_context}
     """
@@ -337,48 +339,39 @@ def summarize_text_gemini(transcript_json: str, visual_analyses: dict[float, str
 
 def summarize_text_local(transcript_json: str, visual_analyses: dict[float, str] = None) -> str:
     """
-    Summarizes the transcript using Local Ollama Qwen, weaving in visual context.
+    Summarizes the transcript using Qwen 2.5 3B, with specific few-shot examples for layout.
     """
     visual_context = ""
-    visual_format_section = ""
     if visual_analyses:
-        visual_context = "\nVisual Content Identified in the Video (from analyzing actual video frames):\n"
+        visual_context = "\nVisual Content Identified in the Video:\n"
         for t, analysis in visual_analyses.items():
-            visual_context += f"- At {t} seconds: {analysis}\n"
-        visual_format_section = "\n    VISUAL CONTENT\n    Describe what was shown in the graphs, charts, diagrams, or images. Include specific numbers, labels, and data points visible in the visuals.\n"
+            m, s = divmod(int(t), 60)
+            visual_context += f"- At {m:02d}:{s:02d}: {analysis}\n"
 
     prompt = f"""
-    You are an expert assistant. Please summarize the following video content.
-    Generate the summary using standard Markdown. Use bolding, bullet points, and headers for clarity.
+    You are an expert assistant. Summarize the video content using standard Markdown.
     
-    CRITICAL: The "Visual Content" data below was extracted by analyzing actual frames/screenshots from the video.
-    This data contains information about graphs, charts, numbers, and visuals that the speaker shows on screen.
+    CRITICAL CONSTRAINTS:
+    - Do NOT output reasoning, thinking process, confidence scores, or internal notes.
+    - Use MM:SS format for all timestamps.
+    - Use Markdown tables for Visual Content and data comparisons.
     
-    You MUST include this visual data in your summary. 
-    For the VISUAL CONTENT section, format it as a Markdown table with columns for 'Timestamp', 'Visual Element', and 'Analysis/Description'.
-    Include specific numbers, data points, and labels from charts and graphs where possible.
-    Do NOT ignore the visual content. It is just as important as the spoken transcript.
-    
-    Structure the summary as follows:
-    # [VIDEO TITLE]
-    
+    FEW-SHOT EXAMPLE:
+    # Introduction to Python
     ## OVERVIEW
-    [Brief overview here]
-    
+    A short guide on Python types.
     ## KEY TOPICS
-    - [Topic 1]
-    - [Topic 2]
-    
+    - Variables
+    - Types
     ## VISUAL CONTENT (TABLE)
     | Timestamp | Visual Element | Analysis/Description |
     |-----------|---------------|-----------------------|
-    | [Time]    | [Element]     | [Detail]              |
-    
+    | 01:25     | Code Snippet  | Shows `x = 5` and `y = "hello"`. |
     ## IMPORTANT POINTS
-    - [Point 1]
-    - [Point 2]
+    - Python is dynamic.
     
-    Transcript (JSON):
+    NOW GENERATE THE SUMMARY FOR:
+    Transcript:
     {transcript_json}
     {visual_context}
     """
@@ -387,64 +380,147 @@ def summarize_text_local(transcript_json: str, visual_analyses: dict[float, str]
     ])
     return response['message']['content']
 
-def answer_question_gemini(transcript: str, question: str, visual_analyses_json: str = None) -> str:
+def answer_question_gemini(transcript: str, question: str, visual_analyses_json: str = None, video_path: str = None) -> str:
     """
-    Answers a question based on the provided transcript AND visual analyses using Gemini.
+    Answers a question based on transcript AND visual analyses.
+    Includes On-Demand frame extraction if a timestamp is detected in the question.
     """
+    # --- STEP 1: Detect timestamp in question ---
+    time_pattern = re.search(r'(\d{1,2}):(\d{2})(?::(\d{2}))?|(\d+)\s*minute|(\d+)\s*second', question, re.IGNORECASE)
+    
+    on_demand_visual = ""
+    on_demand_audio = ""
+    detected_seconds = None
+
+    if time_pattern and video_path and os.path.exists(video_path):
+        raw = time_pattern.group(0)
+        parts = re.findall(r'\d+', raw)
+        
+        if ':' in raw:
+            if len(parts) == 3:
+                detected_seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            else:
+                detected_seconds = int(parts[0]) * 60 + int(parts[1])
+        elif 'minute' in raw.lower():
+            detected_seconds = int(parts[0]) * 60
+        elif 'second' in raw.lower():
+            detected_seconds = int(parts[0])
+
+    if detected_seconds is not None:
+        # Extract frame on-demand at that exact second
+        frames = extract_frames(video_path, [float(detected_seconds)])
+        
+        if frames:
+            try:
+                chunks = json.loads(transcript) if transcript.strip().startswith('[') else []
+            except:
+                chunks = []
+            
+            # Get audio window: 30 seconds before and after
+            window_chunks = [
+                c for c in chunks
+                if abs(c.get("start_time_in_seconds", 0) - detected_seconds) <= 30
+            ]
+            caption = " ".join([c.get("text", "") for c in window_chunks])
+            
+            # Analyze the on-demand frame with Gemini vision
+            fresh_analyses = analyze_frames_gemini(frames, json.dumps(window_chunks))
+            
+            if fresh_analyses:
+                t_key = list(fresh_analyses.keys())[0]
+                on_demand_visual = f"\n\nON-DEMAND FRAME ANALYSIS at {detected_seconds}s:\n{fresh_analyses[t_key]}"
+            
+            on_demand_audio = f"\n\nAUDIO NEAR {detected_seconds}s (±30 seconds):\n{caption}"
+        else:
+            on_demand_audio = f"\n\nNo frame could be extracted at {detected_seconds}s from the video."
+            on_demand_visual = ""
+
+    # --- STEP 2: Build existing visual context ---
     visual_context = ""
     if visual_analyses_json:
         try:
             visual_data = json.loads(visual_analyses_json)
-            visual_context = "\n\nVisual Content from the Video (frame analyses at various timestamps):\n"
+            visual_context = "\n\nPre-captured Visual Frame Analyses:\n"
             for t, analysis in visual_data.items():
                 visual_context += f"- At {t} seconds: {analysis}\n"
         except:
             pass
 
+    # --- STEP 3: Build the prompt ---
     prompt = f"""
-    You are an expert assistant. Please answer the user's question based on the following transcript and visual analysis from a video. 
-    Use BOTH the transcript text AND the visual content descriptions to answer the question.
-    If the answer involves data shown in graphs, charts, or visual elements described in the visual content section, use that information.
-    If the answer is not contained within either the transcript or visual content, politely state that the video does not cover that topic.
+    You are an expert video analysis assistant with access to a full transcript and visual frame analyses.
 
-    Transcript:
+    {f"TIMESTAMP QUERY DETECTED: The user asked about {detected_seconds} seconds into the video. Use the ON-DEMAND data below as the PRIMARY source for your answer." if detected_seconds is not None else "Answer the user's question using the transcript and visual analyses below."}
+    
+    If detection was triggered, structure your response as:
+    AUDIO (around {detected_seconds}s): [What the speaker was saying]
+    VISUAL (around {detected_seconds}s): [What was shown on screen]
+    CONTEXT: [Summary of the moment]
+
+    If the answer is not found in any of the provided data, say so clearly.
+
+    FULL TRANSCRIPT:
     {transcript}
     {visual_context}
+    {on_demand_audio}
+    {on_demand_visual}
 
-    Question:
+    USER QUESTION:
     {question}
     """
     response = call_gemini_with_retry(prompt)
     return response.text
 
-def answer_question_local(transcript: str, question: str, visual_analyses_json: str = None) -> str:
+def answer_question_local(transcript: str, question: str, visual_analyses_json: str = None, video_path: str = None) -> str:
     """
-    Answers a question based on the provided transcript AND visual analyses using Local Ollama Qwen.
+    Answers a question using Local Qwen 2.5 3B with optional on-demand frame extraction via Moondream.
     """
+    time_pattern = re.search(r'(\d{1,2}):(\d{2})(?::(\d{2}))?|(\d+)\s*minute|(\d+)\s*second', question, re.IGNORECASE)
+    on_demand_visual = ""
+    on_demand_audio = ""
+    detected_seconds = None
+
+    if time_pattern and video_path and os.path.exists(video_path):
+        raw = time_pattern.group(0)
+        parts = re.findall(r'\d+', raw)
+        if ':' in raw:
+            detected_seconds = int(parts[0]) * 60 + int(parts[1]) if len(parts) == 2 else int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+        elif 'minute' in raw.lower(): detected_seconds = int(parts[0]) * 60
+        elif 'second' in raw.lower(): detected_seconds = int(parts[0])
+
+    if detected_seconds is not None:
+        frames = extract_frames(video_path, [float(detected_seconds)])
+        if frames:
+            chunks = json.loads(transcript)
+            window_chunks = [c for c in chunks if abs(c.get("start_time_in_seconds", 0) - detected_seconds) <= 30]
+            caption = " ".join([c.get("text", "") for c in window_chunks])
+            fresh_analyses = analyze_frames_local(frames, json.dumps(window_chunks))
+            if fresh_analyses:
+                t_key = list(fresh_analyses.keys())[0]
+                on_demand_visual = f"\n\nON-DEMAND FRAME ANALYSIS at {detected_seconds}s:\n{fresh_analyses[t_key]}"
+            on_demand_audio = f"\n\nAUDIO NEAR {detected_seconds}s (±30 seconds):\n{caption}"
+
     visual_context = ""
     if visual_analyses_json:
         try:
             visual_data = json.loads(visual_analyses_json)
-            visual_context = "\n\nVisual Content from the Video (frame analyses at various timestamps):\n"
+            visual_context = "\n\nPre-captured Visual Frame Analyses:\n"
             for t, analysis in visual_data.items():
                 visual_context += f"- At {t} seconds: {analysis}\n"
-        except:
-            pass
+        except: pass
 
     prompt = f"""
-    You are an expert assistant. Please answer the user's question based on the following transcript and visual analysis from a video. 
-    Use BOTH the transcript text AND the visual content descriptions to answer the question.
-    If the answer involves data shown in graphs, charts, or visual elements described in the visual content section, use that information.
-    If the answer is not contained within either the transcript or visual content, politely state that the video does not cover that topic.
-
+    You are an expert video analysis assistant.
+    {f"TIMESTAMP QUERY DETECTED: {detected_seconds}s. Provide AUDIO, VISUAL, and CONTEXT sections." if detected_seconds is not None else "Answer the question using provided data."}
+    
     Transcript:
     {transcript}
     {visual_context}
+    {on_demand_audio}
+    {on_demand_visual}
 
     Question:
     {question}
     """
-    response = ollama.chat(model=TEXT_MODEL, messages=[
-        {'role': 'user', 'content': prompt}
-    ])
+    response = ollama.chat(model=TEXT_MODEL, messages=[{'role': 'user', 'content': prompt}])
     return response['message']['content']

@@ -6,12 +6,18 @@ import traceback
 import tempfile
 import json
 import yt_dlp
+import time
+import shutil
 
 import models, schemas, services
 from database import engine, get_db
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
+
+# Persistent data directory for videos
+DATA_DIR = os.path.join(os.getcwd(), "data", "videos")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 app = FastAPI(title="Visilink API")
 
@@ -103,11 +109,15 @@ async def analyze_uploaded_video(
             os.remove(video_path)
         raise HTTPException(status_code=500, detail=f"Failed to summarize transcript: {str(e)}")
 
-    # Clean up
+    # Clean up audio
     if os.path.exists(audio_path):
         os.remove(audio_path)
-    if os.path.exists(video_path):
-        os.remove(video_path)
+    
+    # Save video to persistent storage for on-demand Q&A
+    final_video_name = f"{db.query(models.VideoAnalysis).count() + 1}_{file.filename}"
+    persistent_video_path = os.path.join(DATA_DIR, final_video_name)
+    import shutil
+    shutil.move(video_path, persistent_video_path)
 
     # Serialize visual analyses for storage
     visual_analyses_json = None
@@ -121,6 +131,7 @@ async def analyze_uploaded_video(
         transcript=transcript,
         summary=summary,
         visual_analyses=visual_analyses_json,
+        video_path=persistent_video_path,
         engine=engine_choice
     )
     db.add(db_analysis)
@@ -160,23 +171,21 @@ def analyze_video(request: schemas.AnalyzeRequest, db: Session = Depends(get_db)
         triggers = ai["detect_triggers"](transcript)
         if triggers:
             # For youtube links, we must download the video first since extract_frames asks for a local path
-            temp_dir = tempfile.gettempdir()
-            video_path = os.path.join(temp_dir, "temp_youtube_video.mp4")
+            final_video_name = f"yt_{int(time.time())}.mp4"
+            persistent_video_path = os.path.join(DATA_DIR, final_video_name)
 
             opts = {
                 'format': 'bestvideo[ext=mp4]/best',
-                'outtmpl': video_path,
+                'outtmpl': persistent_video_path,
                 'quiet': True,
                 'no_warnings': True
             }
 
+            import time
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([url])
 
-            frames = services.extract_frames(video_path, triggers)
-
-            if os.path.exists(video_path):
-                os.remove(video_path)
+            frames = services.extract_frames(persistent_video_path, triggers)
 
             if frames:
                 visual_analyses = ai["analyze_frames"](frames, transcript)
@@ -211,6 +220,7 @@ def analyze_video(request: schemas.AnalyzeRequest, db: Session = Depends(get_db)
         transcript=transcript,
         summary=summary,
         visual_analyses=visual_analyses_json,
+        video_path=persistent_video_path if 'persistent_video_path' in locals() else None,
         engine=engine_choice
     )
     db.add(db_analysis)
@@ -252,7 +262,12 @@ def ask_question(analysis_id: int, request: schemas.QuestionRequest, db: Session
 
     try:
         ai = get_ai_functions(analysis.engine or "gemini")
-        answer = ai["answer"](analysis.transcript, request.question, analysis.visual_analyses)
+        answer = ai["answer"](
+            transcript=analysis.transcript,
+            question=request.question,
+            visual_analyses_json=analysis.visual_analyses,
+            video_path=analysis.video_path
+        )
         return schemas.QuestionResponse(answer=answer)
     except Exception as e:
         traceback.print_exc()

@@ -11,6 +11,7 @@ class VideoAnalysis(Base):
     transcript = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     visual_analyses = Column(Text, nullable=True)  # JSON string of frame analyses
+    video_path = Column(String(500), nullable=True) # Path to local video file for on-demand Q&A
     engine = Column(String(50), nullable=False, default="gemini")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
