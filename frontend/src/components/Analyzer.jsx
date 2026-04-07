@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../config';
 
 function Analyzer({ onAnalyzeSuccess, engine }) {
     const [mode, setMode] = useState('url'); // 'url' or 'file'
@@ -18,7 +19,7 @@ function Analyzer({ onAnalyzeSuccess, engine }) {
         try {
             let response;
             if (mode === 'url') {
-                response = await fetch('http://localhost:8000/api/analyze', {
+                response = await fetch(`${API_BASE_URL}/api/analyze`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url, engine }),
@@ -28,7 +29,7 @@ function Analyzer({ onAnalyzeSuccess, engine }) {
                 formData.append('file', file);
                 formData.append('engine_choice', engine);
 
-                response = await fetch('http://localhost:8000/api/analyze/upload', {
+                response = await fetch(`${API_BASE_URL}/api/analyze/upload`, {
                     method: 'POST',
                     body: formData,
                 });

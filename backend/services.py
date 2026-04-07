@@ -299,29 +299,35 @@ def summarize_text_gemini(transcript_json: str, visual_analyses: dict[float, str
 
     prompt = f"""
     You are an expert assistant. Please summarize the following video content.
-    Generate the summary using plain text only. Do NOT use markdown syntax. 
-    Do not use asterisks (*) for bullets, do not use hash symbols (#) for headers, 
-    and do not use quotation marks around titles. Use line breaks and capitalization to create structure.
+    Generate the summary using standard Markdown. Use bolding, bullet points, and headers for clarity.
     
     CRITICAL: The "Visual Content" data below was extracted by analyzing actual frames/screenshots from the video.
     This data contains information about graphs, charts, numbers, and visuals that the speaker shows on screen.
-    You MUST include this visual data in your summary. Include specific numbers, data points, labels from charts and graphs.
+    
+    You MUST include this visual data in your summary. 
+    For the VISUAL CONTENT section, format it as a Markdown table with columns for 'Timestamp', 'Visual Element', and 'Analysis/Description'.
+    Include specific numbers, data points, and labels from charts and graphs where possible.
     Do NOT ignore the visual content. It is just as important as the spoken transcript.
     
-    Format exactly like this:
-    YOUR TITLE HERE
-
-    OVERVIEW
-    Your brief overview here...
-
-    KEY TOPICS
-    Topic 1
-    Topic 2
-{visual_format_section}
-    IMPORTANT POINTS
-    Point 1
-    Point 2
-
+    Structure the summary as follows:
+    # [VIDEO TITLE]
+    
+    ## OVERVIEW
+    [Brief overview here]
+    
+    ## KEY TOPICS
+    - [Topic 1]
+    - [Topic 2]
+    
+    ## VISUAL CONTENT (TABLE)
+    | Timestamp | Visual Element | Analysis/Description |
+    |-----------|---------------|-----------------------|
+    | [Time]    | [Element]     | [Detail]              |
+    
+    ## IMPORTANT POINTS
+    - [Point 1]
+    - [Point 2]
+    
     Transcript (JSON):
     {transcript_json}
     {visual_context}
@@ -343,29 +349,35 @@ def summarize_text_local(transcript_json: str, visual_analyses: dict[float, str]
 
     prompt = f"""
     You are an expert assistant. Please summarize the following video content.
-    Generate the summary using plain text only. Do NOT use markdown syntax. 
-    Do not use asterisks (*) for bullets, do not use hash symbols (#) for headers, 
-    and do not use quotation marks around titles. Use line breaks and capitalization to create structure.
+    Generate the summary using standard Markdown. Use bolding, bullet points, and headers for clarity.
     
     CRITICAL: The "Visual Content" data below was extracted by analyzing actual frames/screenshots from the video.
     This data contains information about graphs, charts, numbers, and visuals that the speaker shows on screen.
-    You MUST include this visual data in your summary. Include specific numbers, data points, labels from charts and graphs.
+    
+    You MUST include this visual data in your summary. 
+    For the VISUAL CONTENT section, format it as a Markdown table with columns for 'Timestamp', 'Visual Element', and 'Analysis/Description'.
+    Include specific numbers, data points, and labels from charts and graphs where possible.
     Do NOT ignore the visual content. It is just as important as the spoken transcript.
     
-    Format exactly like this:
-    YOUR TITLE HERE
-
-    OVERVIEW
-    Your brief overview here...
-
-    KEY TOPICS
-    Topic 1
-    Topic 2
-{visual_format_section}
-    IMPORTANT POINTS
-    Point 1
-    Point 2
-
+    Structure the summary as follows:
+    # [VIDEO TITLE]
+    
+    ## OVERVIEW
+    [Brief overview here]
+    
+    ## KEY TOPICS
+    - [Topic 1]
+    - [Topic 2]
+    
+    ## VISUAL CONTENT (TABLE)
+    | Timestamp | Visual Element | Analysis/Description |
+    |-----------|---------------|-----------------------|
+    | [Time]    | [Element]     | [Detail]              |
+    
+    ## IMPORTANT POINTS
+    - [Point 1]
+    - [Point 2]
+    
     Transcript (JSON):
     {transcript_json}
     {visual_context}

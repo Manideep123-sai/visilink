@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 import os
 import traceback
 import tempfile
@@ -7,14 +8,17 @@ import json
 import yt_dlp
 
 import models, schemas, services
-from database import get_db
+from database import engine, get_db
+
+# Create database tables
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Visilink API")
 
 # Setup CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://yourdomain.com"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,9 +44,9 @@ def get_ai_functions(engine_choice: str):
 @app.post("/api/analyze/upload", response_model=schemas.VideoAnalysisResponse)
 async def analyze_uploaded_video(
     file: UploadFile = File(...),
-    engine_choice: str = Form("gemini")
+    engine_choice: str = Form("gemini"),
+    db: Session = Depends(get_db)
 ):
-    db = get_db()
     ai = get_ai_functions(engine_choice)
 
     # Save the uploaded file temporarily
@@ -110,8 +114,8 @@ async def analyze_uploaded_video(
     if visual_analyses:
         visual_analyses_json = json.dumps({str(k): v for k, v in visual_analyses.items()})
 
-    # 5. Save to Firestore
-    analysis = models.VideoAnalysis(
+    # 5. Save to database
+    db_analysis = models.VideoAnalysis(
         youtube_url=f"local://{video_title}",
         video_title=video_title,
         transcript=transcript,
@@ -119,25 +123,15 @@ async def analyze_uploaded_video(
         visual_analyses=visual_analyses_json,
         engine=engine_choice
     )
+    db.add(db_analysis)
+    db.commit()
+    db.refresh(db_analysis)
 
-    doc_ref = db.collection("video_analyses").add(analysis.to_dict())
-    analysis.doc_id = doc_ref[1].id
-
-    return {
-        "id": analysis.doc_id,
-        "youtube_url": analysis.youtube_url,
-        "video_title": analysis.video_title,
-        "transcript": analysis.transcript,
-        "summary": analysis.summary,
-        "visual_analyses": analysis.visual_analyses,
-        "engine": analysis.engine,
-        "created_at": analysis.created_at
-    }
+    return db_analysis
 
 
 @app.post("/api/analyze", response_model=schemas.VideoAnalysisResponse)
-def analyze_video(request: schemas.AnalyzeRequest):
-    db = get_db()
+def analyze_video(request: schemas.AnalyzeRequest, db: Session = Depends(get_db)):
     url = str(request.url)
     engine_choice = request.engine
     ai = get_ai_functions(engine_choice)
@@ -210,8 +204,8 @@ def analyze_video(request: schemas.AnalyzeRequest):
     if visual_analyses:
         visual_analyses_json = json.dumps({str(k): v for k, v in visual_analyses.items()})
 
-    # 5. Save to Firestore
-    analysis = models.VideoAnalysis(
+    # 5. Save to database
+    db_analysis = models.VideoAnalysis(
         youtube_url=url,
         video_title=title,
         transcript=transcript,
@@ -219,81 +213,39 @@ def analyze_video(request: schemas.AnalyzeRequest):
         visual_analyses=visual_analyses_json,
         engine=engine_choice
     )
+    db.add(db_analysis)
+    db.commit()
+    db.refresh(db_analysis)
 
-    doc_ref = db.collection("video_analyses").add(analysis.to_dict())
-    analysis.doc_id = doc_ref[1].id
-
-    return {
-        "id": analysis.doc_id,
-        "youtube_url": analysis.youtube_url,
-        "video_title": analysis.video_title,
-        "transcript": analysis.transcript,
-        "summary": analysis.summary,
-        "visual_analyses": analysis.visual_analyses,
-        "engine": analysis.engine,
-        "created_at": analysis.created_at
-    }
+    return db_analysis
 
 @app.get("/api/history", response_model=list[schemas.VideoAnalysisResponse])
-def get_history(skip: int = 0, limit: int = 20):
-    db = get_db()
-    docs = db.collection("video_analyses").order_by("created_at", direction="DESCENDING").offset(skip).limit(limit).stream()
-    analyses = []
-    for doc in docs:
-        data = doc.to_dict()
-        analysis = models.VideoAnalysis.from_dict(data, doc.id)
-        analyses.append({
-            "id": analysis.doc_id,
-            "youtube_url": analysis.youtube_url,
-            "video_title": analysis.video_title,
-            "transcript": analysis.transcript,
-            "summary": analysis.summary,
-            "visual_analyses": analysis.visual_analyses,
-            "engine": analysis.engine,
-            "created_at": analysis.created_at
-        })
+def get_history(skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
+    analyses = db.query(models.VideoAnalysis).order_by(models.VideoAnalysis.created_at.desc()).offset(skip).limit(limit).all()
     return analyses
 
 @app.get("/api/analyses/{analysis_id}", response_model=schemas.VideoAnalysisResponse)
-def get_analysis(analysis_id: str):
-    db = get_db()
-    doc = db.collection("video_analyses").document(analysis_id).get()
-    if not doc.exists:
+def get_analysis(analysis_id: int, db: Session = Depends(get_db)):
+    analysis = db.query(models.VideoAnalysis).filter(models.VideoAnalysis.id == analysis_id).first()
+    if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
-
-    data = doc.to_dict()
-    analysis = models.VideoAnalysis.from_dict(data, doc.id)
-
-    return {
-        "id": analysis.doc_id,
-        "youtube_url": analysis.youtube_url,
-        "video_title": analysis.video_title,
-        "transcript": analysis.transcript,
-        "summary": analysis.summary,
-        "visual_analyses": analysis.visual_analyses,
-        "engine": analysis.engine,
-        "created_at": analysis.created_at
-    }
+    return analysis
 
 @app.delete("/api/analyses/{analysis_id}", status_code=204)
-def delete_analysis(analysis_id: str):
-    db = get_db()
-    doc = db.collection("video_analyses").document(analysis_id).get()
-    if not doc.exists:
+def delete_analysis(analysis_id: int, db: Session = Depends(get_db)):
+    analysis = db.query(models.VideoAnalysis).filter(models.VideoAnalysis.id == analysis_id).first()
+    if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
 
-    db.collection("video_analyses").document(analysis_id).delete()
+    db.delete(analysis)
+    db.commit()
     return None
 
 @app.post("/api/analyses/{analysis_id}/question", response_model=schemas.QuestionResponse)
-def ask_question(analysis_id: str, request: schemas.QuestionRequest):
-    db = get_db()
-    doc = db.collection("video_analyses").document(analysis_id).get()
-    if not doc.exists:
+def ask_question(analysis_id: int, request: schemas.QuestionRequest, db: Session = Depends(get_db)):
+    analysis = db.query(models.VideoAnalysis).filter(models.VideoAnalysis.id == analysis_id).first()
+    if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
-
-    data = doc.to_dict()
-    analysis = models.VideoAnalysis.from_dict(data, doc.id)
 
     if not analysis.transcript:
         raise HTTPException(status_code=400, detail="No transcript available to answer questions from.")

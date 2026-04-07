@@ -24,6 +24,25 @@ body {
   overflow-x: hidden;
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
 #root {
   width: 100%;
   margin: 0 auto;
@@ -189,23 +208,60 @@ input:focus {
   line-height: 1.6;
 }
 
-.summary-content ul {
-  padding-left: 1.5rem;
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
-}
-
-.summary-content li {
-  margin-bottom: 0.5rem;
-}
-
-.summary-content p {
-  margin-bottom: 1rem;
-}
-
 .summary-content strong {
   color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Markdown Support */
+.summary-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.summary-content th {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--primary-color);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.summary-content td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.summary-content tr:last-child td {
+  border-bottom: none;
+}
+
+.summary-content tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.summary-content blockquote {
+  border-left: 4px solid var(--primary-color);
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+.summary-content code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  color: var(--accent-color);
 }
 
 /* Plain Text Summary Classes */

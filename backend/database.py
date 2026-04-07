@@ -1,28 +1,20 @@
-import firebase_admin
-from firebase_admin import credentials, firestore
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 from dotenv import load_dotenv
-import json
 
 load_dotenv()
 
-# Get Firebase credentials from environment variable or file
-firebase_creds = os.getenv("FIREBASE_CREDENTIALS")
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:password@localhost:3306/visilink")
 
-if firebase_creds:
-    # If credentials are in environment variable (JSON string)
-    cred = credentials.Certificate(json.loads(firebase_creds))
-else:
-    # If using credentials file
-    cred = credentials.Certificate("serviceAccountKey.json")
-
-# Initialize Firebase (only if not already initialized)
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
-
-# Get Firestore client
-db = firestore.client()
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 def get_db():
-    """Return Firestore database instance"""
-    return db
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+

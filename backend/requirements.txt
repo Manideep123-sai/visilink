@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-firebase-admin
+sqlalchemy
+pymysql
 yt-dlp
 faster-whisper
 ollama
@@ -8,3 +9,4 @@ python-dotenv
 pydantic
 python-multipart
 google-generativeai
+

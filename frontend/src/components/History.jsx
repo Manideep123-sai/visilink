@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 
 function History({ onSelectResult }) {
     const [history, setHistory] = useState([]);
@@ -12,7 +13,7 @@ function History({ onSelectResult }) {
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            const res = await fetch('http://localhost:8000/api/history');
+            const res = await fetch(`${API_BASE_URL}/api/history`);
             if (!res.ok) throw new Error('Failed to fetch history');
             const data = await res.json();
             setHistory(data);
@@ -28,7 +29,7 @@ function History({ onSelectResult }) {
         if (!window.confirm("Are you sure you want to delete this analysis?")) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/api/analyses/${id}`, {
+            const res = await fetch(`${API_BASE_URL}/api/analyses/${id}`, {
                 method: 'DELETE',
             });
             if (!res.ok) throw new Error('Failed to delete history item');
