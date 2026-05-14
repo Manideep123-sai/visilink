@@ -1,3 +1,6 @@
+# Manideep Sai C
+# Reg.no 23BCE0737
+
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.sql import func
 from database import Base

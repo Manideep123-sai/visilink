@@ -1,3 +1,6 @@
+// Manideep Sai C
+// Reg.no 23BCE0737
+
 import React, { useState } from 'react';
 import Analyzer from './components/Analyzer';
 import ResultDetail from './components/ResultDetail';

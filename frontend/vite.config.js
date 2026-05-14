@@ -1,3 +1,6 @@
+// Manideep Sai C
+// Reg.no 23BCE0737
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

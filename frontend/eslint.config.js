@@ -1,3 +1,6 @@
+// Manideep Sai C
+// Reg.no 23BCE0737
+
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
